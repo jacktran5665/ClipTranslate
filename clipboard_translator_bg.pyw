@@ -1,5 +1,7 @@
-import re, time, keyboard, pyperclip, tkinter as tk, queue
+import re, time, keyboard, pyperclip, tkinter as tk, queue, threading
 from deep_translator import GoogleTranslator
+import pystray
+from PIL import Image, ImageDraw
 
 class ClipTranslator:
     # ===== LANGUAGE SETTINGS - EDIT THESE =====
@@ -21,13 +23,15 @@ class ClipTranslator:
         self.root = tk.Tk()
         self.root.withdraw()
         self.queue = queue.Queue()
+        self.running = True
+        self.tray_icon = None
     
     def detect_source_lang(self, text):
         if self.SOURCE_LANG in self.DETECTION_PATTERNS:
             pattern = self.DETECTION_PATTERNS[self.SOURCE_LANG]
             return bool(re.search(pattern, text))
         return True 
-    
+
     def translate(self, text):
         text = text.strip()
         if not text: return None, "No text"
@@ -38,16 +42,16 @@ class ClipTranslator:
             return result, self.DISPLAY_NAME
         except Exception as e:
             return None, f"Error: {e}"
-    
+
     def drag_start(self, e, popup):
         popup.x, popup.y = e.x_root, e.y_root
         popup.ox, popup.oy = popup.winfo_x(), popup.winfo_y()
-    
+
     def drag_move(self, e, popup):
         x = popup.ox + (e.x_root - popup.x)
         y = popup.oy + (e.y_root - popup.y)
         popup.geometry(f"350x120+{x}+{y}")
-    
+
     def show_popup(self, text):
         popup = tk.Toplevel(self.root)
         popup.geometry("350x120")
@@ -76,31 +80,66 @@ class ClipTranslator:
         txt.config(state="disabled")
         
         popup.after(8000, popup.destroy)
-    
+
     def hotkey(self):
-        text = pyperclip.paste()
-        if not text.strip():
-            return
+        try:
+            text = pyperclip.paste()
+            if not text.strip():
+                return
+            
+            result, msg = self.translate(text)
+            if result:
+                self.queue.put(result)
+        except:
+            pass
+
+    def create_tray_icon(self):
+        # Create a simple icon image
+        image = Image.new('RGB', (64, 64), color='#0078d4')
+        draw = ImageDraw.Draw(image)
+        draw.ellipse([16, 16, 48, 48], fill='white')
+        draw.text((26, 22), "T", fill='#0078d4', font_size=20)
         
-        result, msg = self.translate(text)
-        if result:
-            self.queue.put(result)
+        # Create system tray menu
+        menu = pystray.Menu(
+            pystray.MenuItem(f"Clipboard Translator ({self.DISPLAY_NAME})", None, enabled=False),
+            pystray.MenuItem("Hotkey: Ctrl+Shift+X", None, enabled=False),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Quit", self.quit_app)
+        )
+        
+        self.tray_icon = pystray.Icon("ClipTranslator", image, menu=menu)
     
-    def run(self):
+    def quit_app(self, icon=None, item=None):
+        self.running = False
+        if self.tray_icon:
+            self.tray_icon.stop()
+        self.root.quit()
+    
+    def run_gui(self):
         keyboard.add_hotkey('ctrl+shift+x', self.hotkey)
         
-        try:
-            while True:
+        while self.running:
+            try:
                 self.root.update()
                 try:
                     self.show_popup(self.queue.get_nowait())
                 except queue.Empty:
                     pass
                 time.sleep(0.01)
-        except:
-            pass
-        finally:
-            self.root.destroy()
+            except:
+                break
+        
+        self.root.destroy()
+    
+    def run(self):
+        # Create and start system tray icon in separate thread
+        self.create_tray_icon()
+        tray_thread = threading.Thread(target=self.tray_icon.run, daemon=True)
+        tray_thread.start()
+        
+        # Run GUI in main thread
+        self.run_gui()
 
 if __name__ == "__main__":
     ClipTranslator().run()
