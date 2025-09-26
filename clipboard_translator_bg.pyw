@@ -25,6 +25,7 @@ class ClipTranslator:
         self.queue = queue.Queue()
         self.running = True
         self.tray_icon = None
+        self.last_translation = None
     
     def detect_source_lang(self, text):
         if self.SOURCE_LANG in self.DETECTION_PATTERNS:
@@ -89,6 +90,7 @@ class ClipTranslator:
             
             result, msg = self.translate(text)
             if result:
+                self.last_translation = result
                 self.queue.put(result)
         except:
             pass
@@ -98,7 +100,8 @@ class ClipTranslator:
         image = Image.new('RGB', (64, 64), color='#0078d4')
         draw = ImageDraw.Draw(image)
         draw.ellipse([16, 16, 48, 48], fill='white')
-        draw.text((26, 22), "T", fill='#0078d4', font_size=20)
+        # Draw a "T" for Translator
+        draw.text((24, 20), "T", fill='#0078d4')
         
         # Create system tray menu
         menu = pystray.Menu(
@@ -108,7 +111,26 @@ class ClipTranslator:
             pystray.MenuItem("Quit", self.quit_app)
         )
         
-        self.tray_icon = pystray.Icon("ClipTranslator", image, menu=menu)
+        self.tray_icon = pystray.Icon("ClipTranslator", image, "ClipTranslate", menu=menu)
+    
+    def translate_now(self, icon=None, item=None):
+        """Manually trigger translation of current clipboard content"""
+        try:
+            text = pyperclip.paste()
+            if not text.strip():
+                return
+            
+            result, msg = self.translate(text)
+            if result:
+                self.last_translation = result
+                self.queue.put(result)
+        except Exception as e:
+            pass
+    
+    def show_last_translation(self, icon=None, item=None):
+        """Show the last translation result"""
+        if self.last_translation:
+            self.queue.put(self.last_translation)
     
     def quit_app(self, icon=None, item=None):
         self.running = False
