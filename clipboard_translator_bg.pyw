@@ -96,14 +96,11 @@ class ClipTranslator:
             pass
 
     def create_tray_icon(self):
-        # Create a simple icon image
         image = Image.new('RGB', (64, 64), color='#0078d4')
         draw = ImageDraw.Draw(image)
         draw.ellipse([16, 16, 48, 48], fill='white')
-        # Draw a "T" for Translator
         draw.text((24, 20), "T", fill='#0078d4')
         
-        # Create system tray menu
         menu = pystray.Menu(
             pystray.MenuItem(f"Clipboard Translator ({self.DISPLAY_NAME})", None, enabled=False),
             pystray.MenuItem("Hotkey: Ctrl+Shift+X", None, enabled=False),
@@ -112,25 +109,6 @@ class ClipTranslator:
         )
         
         self.tray_icon = pystray.Icon("ClipTranslator", image, "ClipTranslate", menu=menu)
-    
-    def translate_now(self, icon=None, item=None):
-        """Manually trigger translation of current clipboard content"""
-        try:
-            text = pyperclip.paste()
-            if not text.strip():
-                return
-            
-            result, msg = self.translate(text)
-            if result:
-                self.last_translation = result
-                self.queue.put(result)
-        except Exception as e:
-            pass
-    
-    def show_last_translation(self, icon=None, item=None):
-        """Show the last translation result"""
-        if self.last_translation:
-            self.queue.put(self.last_translation)
     
     def quit_app(self, icon=None, item=None):
         self.running = False
